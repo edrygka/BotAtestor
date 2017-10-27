@@ -1,0 +1,6 @@
+CREATE TABLE VerificationCode(
+    Id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, 
+    VerifyCode VARCHAR(50) NULL,
+    Address CHAR(32) NULL UNIQUE,
+    Status VARCHAR(50) DEFAULT unverified
+    );
