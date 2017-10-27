@@ -38,7 +38,7 @@ function insertItemIntoTable(row, object, callback){
 function updateItemIntoTable(id ,row, object, callback){
 	db.query(`UPDATE VerificationCode SET ${row} = ? WHERE Id = ?`, [object, id], function (err, result){
 		if (err) throw err;
-		if(callback) callback()
+		if(callback) callback(result)
 	})
 }
 
@@ -59,11 +59,13 @@ eventBus.on('paired', function(from_address){
 
 eventBus.on('text', function (from_address, text){
 	var addressOfUser = text;
-
+	insertItemIntoTable("Address", addressOfUser, function(result){
+		device.sendMessageToDevice(from_address, 'text', result)
+	})
 	if(addressOfUser){
 		walletDefinedByKeys.issueNextAddress(wallet, 0, function(objAddress){
 			var byteball_address = objAddress.address;
-			device.sendMessageToDevice(from_address, 'text', "I am memorize your byteball address "+addressOfUser+" .\tPlease pay.\n[1000 bytes](byteball:"+byteball_address+"?amount=1000)");//cost of assets 1000 bytes
+			device.sendMessageToDevice(from_address, 'text', "I am memorize your byteball address "+addressOfUser+" .\tPlease pay to continue atestation.\n[1000 bytes](byteball:"+byteball_address+"?amount=1000)");//cost of assets 1000 bytes
 			// TODO: await confirmation, canceled payment, double spent, unconfirmed payment, done 
 		});
 	}
