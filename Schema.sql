@@ -1,7 +1,8 @@
 CREATE TABLE VerificationCode(
-    Id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, 
-    VerifyCode VARCHAR(50) NULL,
-    Address CHAR(32) NULL UNIQUE,
-    Email VARCHAR(50) NULL UNIQUE,
-    Status VARCHAR(50) DEFAULT unverified
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, 
+    verifyCode VARCHAR(50) NULL,
+    address CHAR(32) NULL,
+    amount INTEGER NULL,
+    email VARCHAR(50) NULL,
+    status VARCHAR(50) DEFAULT unverified
     );

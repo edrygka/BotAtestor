@@ -3,13 +3,12 @@ var db = require('byteballcore/db.js')
 var eventBus = require('byteballcore/event_bus.js');
 var device = require('byteballcore/device.js');
 var walletDefinedByKeys = require('byteballcore/wallet_defined_by_keys.js');
-//var mysql = require('mysql');
 require("byteballcore/wallet.js");
 var headlessWallet = require("headless-byteball");
 var wallet;
 var stateAtest = {
-	payment: false,
-	verified: false
+	email: false,
+	payment: false
 }
 
 // This function check verification status of object, return true if object is verificated
@@ -27,18 +26,23 @@ function genVerifyCode(min, max){
     return Math.floor(rand);
 }
 
-// Insert object with param 'Code'
-function insertItemIntoTable(row, object, callback){
-	db.query(`INSERT INTO VerificationCode (${row}) VALUES (?)`, [object], function (err, result) {
-		if (err) throw  err;
-		if (callback) callback()
+// Insert new record in table
+function CreateNewNote(byteball_address, callback){
+	db.query("INSERT INTO VerificationCode (Address) VALUES (?)", [byteball_address], function() {
+		if (callback) callback();
 	})
 }
 
-function updateItemIntoTable(id ,row, object, callback){
-	db.query(`UPDATE VerificationCode SET ${row} = ? WHERE Id = ?`, [object, id], function (err, result){
-		if (err) throw err;
-		if(callback) callback(result)
+//Update anything row in table
+function updateNote(row, byteball_address, object, callback){
+	db.query(`UPDATE VerificationCode SET ${row} = ? WHERE Address = ?`, [object, byteball_address], function(){
+		if(callback) callback();
+	})
+}
+
+function selectRecordByAddress(byteball_address, callback){
+	db.query("SELECT status FROM VerificationCode WHERE address = ?", [byteball_address], function(err, result){
+		if(callback) callback(result);
 	})
 }
 
@@ -46,7 +50,6 @@ eventBus.on('headless_wallet_ready', function(){
 	headlessWallet.setupChatEventHandlers();
 	headlessWallet.readSingleWallet(function(_wallet){
 		wallet = _wallet;
-		//bHeadlessWalletReady = true;
 	});
 });
 
@@ -54,13 +57,20 @@ eventBus.on('headless_wallet_ready', function(){
 eventBus.on('paired', function(from_address){
 	if (!wallet)
 		return handleNoWallet(from_address);
-	device.sendMessageToDevice(from_address, 'text', "Hi! I am Atestation Bot, I will atestate you.\t Please send me your current byteball address")
+	device.sendMessageToDevice(from_address, 'text', "Hi! I am Atestation Bot, I will atestate you.\t Please send me your current email address")
 })
 
+var addressOfUser;
+
+// Get user's byteball address
 eventBus.on('text', function (from_address, text){
-	var addressOfUser = text;
-	insertItemIntoTable("Address", addressOfUser, function(result){
-		device.sendMessageToDevice(from_address, 'text', result)
+	addressOfUser = text;//current user's byteball address
+	//TODO: validation byteball address
+	CreateNewNote(addressOfUser, function(){
+		
+		// selectRecordByAddress(addressOfUser, function (result){
+		// 	device.sendMessageToDevice(from_address, 'text', "result = " + result)
+		// })
 	})
 	if(addressOfUser){
 		walletDefinedByKeys.issueNextAddress(wallet, 0, function(objAddress){
@@ -70,6 +80,12 @@ eventBus.on('text', function (from_address, text){
 		});
 	}
 })
+
+//Wait for confirming TX
+eventBus.on('new_my_transactions', function(arrUnits){
+	// react to receipt of payment(s)
+	
+});
 
 
 
