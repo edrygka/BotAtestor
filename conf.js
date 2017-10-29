@@ -6,3 +6,5 @@ exports.xPubKey = "xpub6CMFuibVG1657kuHgZubbyk1268fKUUaMUbSJbHimiTEZnC59egsun6dn
 exports.account = "0";
 exports.homeDeviceAddress = "0NITNIRU34HBEB3XXUI5SLXSBHDJTUS3I";
 exports.price = "1";
+exports.admin_mail = "admin_edrygha@kek.com";
+//exports.bLights = true;

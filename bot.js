@@ -8,16 +8,15 @@ require("byteballcore/wallet.js");
 var headlessWallet = require("headless-byteball");
 var mail = require('byteballcore/mail.js');
 var wallet;
-var stateAtest = {
-	email: false,
-	payment: false
-}
+
+
+//Total 'TODO' 3!!!
 
 // Sending message to mail
 function sendMessageToUser(to, code){
 	mail.sendmail({
 		to: to,
-		from: "edrygha@gmail.com",
+		from: conf.admin_mail,
 		subject: "Verification",
 		body: "It is your verification code "+ code
 	});
@@ -45,24 +44,26 @@ function CreateNewNote(device_address, callback){
 	})
 }
 
-//Update anything row in table
-function updateNote(object, device_address, callback){
-	db.query(`UPDATE VerificationCode SET verifyCode = ?, address = ?, amount = ?, email = ?, status = ? WHERE deviceAddress = ?`, [object.verifyCode, object.address, object.amount, object.email, object.status, device_address], function(){
+// Update anything row in table
+function updateNote(object, user_id, callback){
+	db.query(`UPDATE VerificationCode SET verifyCode = ?, address = ?, amount = ?, email = ?, status = ? WHERE id = ?`, [object.verifyCode, object.address, object.amount, object.email, object.status, user_id], function(){
 		if(callback) callback();
 	})
 }
 
-function returnStatusByDevice(device_address, callback){
-	db.query("SELECT * FROM VerificationCode WHERE deviceAddress = ?", [device_address], function(rows){
+// Return item with the same device address
+function returnStatusByDevice(user_id, callback){
+	db.query("SELECT * FROM VerificationCode WHERE id = ?", [user_id], function(rows){
 		if (rows.length === 0)
 			throw Error('no current object');
 		var result = rows[0];
 		if(callback) callback(result);
-	})
+	});
 }
 
-function cancelState(device_address){
-	db.query("UPDATE VerificationCode SET cancelDate="+db.getNow()+" WHERE deviceAddress=?", [device_address]);
+// Cancel atestation
+function cancelAtestation(user_id){
+	db.query("UPDATE VerificationCode SET cancel_date="+db.getNow()+" WHERE id=?", [user_id]);
 }
 
 function replaceConsoleLog(){
@@ -83,14 +84,22 @@ eventBus.on('headless_wallet_ready', function(){
 	});
 });
 
+var userId;
+
 // Pairing bot with user, Welcome text
 eventBus.on('paired', function(from_address){
 	if (!wallet)
 		return handleNoWallet(from_address);
 	CreateNewNote(from_address, function(){
+		// Selecting user's ID by device address
+		db.query("SELECT id FROM VerificationCode WHERE deviceAddress=?", [device_address], function(rows){
+			if (rows.length === 0)
+				throw Error('no current object');
+			userId = rows[0];
+		});
 		device.sendMessageToDevice(from_address, 'text', "Hi! I am Atestation Bot, I will atestate you.\t Please send me your current email address")
-	})
-})
+	});
+});
 
 var verifCode;
 
@@ -103,47 +112,98 @@ eventBus.on('text', function (from_address, text){
 			case 'unverified':
 				verifCode = genVerifyCode(99999, 999999);
 				// Sending message with validation code 
-				//sendMessageToUser(usersText, verifCode);//TODO: Fix sendmail(config)
+				sendMessageToUser(usersText, verifCode);//TODO: to fix sendmail config at my desktop computer
 				console.log("looooooooooooooooooooooooooooooo " + verifCode);
 				result.status = 'wait for verification code';
 				result.email = usersText;
-				updateNote(result, from_address);
-				device.sendMessageToDevice(from_address, 'text', "Message sending to your email address. \nInput your confirmation code here")
+				updateNote(result, userId, function(){
+					device.sendMessageToDevice(from_address, 'text', "Message sending to your email address. \nInput your confirmation code here");
+				});
 				break;
 			case 'wait for verification code':
 				if(verifCode == usersText){
 					result.status = 'Success code verification';
 					result.verifyCode = usersText;
-					updateNote(result, from_address);
+					updateNote(result, userId);
 					device.sendMessageToDevice(from_address, 'text', "Confirmation code is valid, to continue atestation input your current byteball address")
 				} else{
 					result.status = 'unverified';
-					updateNote(result, from_address);
-					device.sendMessageToDevice(from_address, 'text', "It is invalid confirmation code, please try again")
+					updateNote(result, userId);
+					device.sendMessageToDevice(from_address, 'text', "It is invalid confirmation code. \n Please enter your email address again.")
 				}
 				break;
 			case 'Success code verification':
 				walletDefinedByKeys.issueNextAddress(wallet, 0, function(objAddress){
 					result.address = objAddress.address;
 					result.status = 'Wait for payment';
-					updateNote(result, from_address);
+					updateNote(result, userId);
 					device.sendMessageToDevice(from_address, 'text', "I am memorize your byteball address "+usersText+" .\tPlease pay to continue atestation.\n["+conf.price+" bytes](byteball:"+objAddress.address+"?amount="+conf.price+")");//cost of assets 1 bytes
 				});
 				break;
 			case 'Wait for payment':
-				//TODO: add ability to cancel order
-				device.sendMessageToDevice(from_address, 'text', "Waiting for your payment.\t End of algoritm, comming soon");
+				//TODO: to fix skiping text
+				if (text !== 'cancel')
+					return device.sendMessageToDevice(from_address, 'text', "Waiting for your payment.  If you want to cancel atestation and start over, click [Cancel](command:cancel).");
+				cancelAtestation(userId);
+				CreateNewNote(from_address, function(){
+					device.sendMessageToDevice(from_address, 'text', "Atestation canceled.\n If you want run atestation, input your current email address.");
+				});
 				break;
+			case 'unconfirmed transaction':
+				device.sendMessageToDevice(from_address, 'text', "We are waiting for confirmation of your payment.  Be patient.");
+				break;
+			case 'double spent':
+				CreateNewNote(from_address, function(){
+					var response = (result.status === 'done')
+						? "The payment was paid and you atestated.\n"
+						: "Your payment appeared to be double-spend and was rejected.\n";
+					response += " If you want run atestation, input your current email address.";
+					device.sendMessageToDevice(from_address, 'text', response);
+				});
+				break;
+			default:
+				throw Error("unknown position "+result);
 		}
 	})
 })
 
 //Wait for confirming TX
 eventBus.on('new_my_transactions', function(arrUnits){
-	// react to receipt of payment(s)
-	console.log("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq " + arrUnits);
+	// console.log("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq " + arrUnits);
+	"SELECT id, outputs.unit, deviceAddress, outputs.amount AS paid_amount \n\
+	FROM outputs JOIN VerificationCode USING(address) WHERE outputs.unit IN(?) AND outputs.asset IS NULL", 
+	[arrUnits],
+	function(rows){
+		rows.forEach(function(row){
+			if (conf.price !== row.paid_amount)
+				return device.sendMessageToDevice(row.deviceAddress, 'text', "Received incorect amount from you: expected "+conf.price+" bytes, received "+row.paid_amount+" bytes.  The payment is ignored.");
+			db.query("UPDATE VerificationCode SET amount=?, status='unconfirmed transaction' WHERE id=?", [row.unit, row.id]);
+			device.sendMessageToDevice(row.deviceAddress, 'text', "Received your payment, please wait a few minutes while it is still unconfirmed.");
+		});
+	}
 });
 
+eventBus.on('my_transactions_became_stable', function(arrUnits){
+	// console.log("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww " + arrUnits);
+	db.query(
+		"SELECT id, deviceAddress, sequence \n\
+		FROM VerificationCode JOIN units USING(unit) WHERE unit IN(?)", 
+		[arrUnits], 
+		function(rows){
+			rows.forEach(function(row){
+				var step = (row.sequence === 'good') ? 'done' : 'doublespend';
+				db.query("UPDATE VerificationCode SET status=? WHERE id=?", [step, row.id]);
+				device.sendMessageToDevice(
+					row.deviceAddress, 'text', 
+					(step === 'done') 
+						? "Payment confirmed.  Now I am atesting you" 
+						: "Your payment appeared to be double-spend.  The order will not be fulfilled"
+				);
+				// TODO: push tx with email address and byteball address
+			});
+		}
+	);
+});
 
 
 
