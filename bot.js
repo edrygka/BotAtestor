@@ -86,7 +86,7 @@ eventBus.on('paired', function(from_address){
 		return handleNoWallet(from_address);
 	CreateNewNote(from_address, function(){
 		// Selecting user's ID by device address
-		db.query("SELECT id FROM user_verification_process WHERE deviceAddress=?", [device_address], function(rows){
+		db.query("SELECT id FROM user_verification_process WHERE deviceAddress=?", [from_address], function(rows){
 			if (rows.length === 0)
 				throw Error('no current object');
 			userId = rows[0];
@@ -101,7 +101,7 @@ var verifCode;
 eventBus.on('text', function (from_address, text){
 	var usersText = text;
 	
-	returnStatusByDevice(from_address, function(result){
+	returnStatusByDevice(userId, function(result){
 		switch(result.status){
 			case 'unverified':
 				verifCode = genVerifyCode(99999, 999999);
