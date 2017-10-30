@@ -10,7 +10,10 @@ var mail = require('byteballcore/mail.js');
 var wallet;
 
 
-//Total 'TODO' 4!!!
+// Total 'TODO' 4!!!
+// multi payment
+// С какого адреса прилетел платеж
+
 
 // Sending message to mail
 function sendMessageToUser(to, code){
@@ -30,21 +33,21 @@ function genVerifyCode(min, max){
 
 // Insert new record in table
 function CreateNewNote(device_address, callback){
-	db.query("INSERT INTO VerificationCode (deviceAddress) VALUES (?)", [device_address], function() {
+	db.query("INSERT INTO user_verification_process (deviceAddress) VALUES (?)", [device_address], function() {
 		if (callback) callback();
 	})
 }
 
 // Update anything row in table
 function updateNote(object, user_id, callback){
-	db.query(`UPDATE VerificationCode SET verifyCode = ?, address = ?, amount = ?, email = ?, status = ? WHERE id = ?`, [object.verifyCode, object.address, object.amount, object.email, object.status, user_id], function(){
+	db.query(`UPDATE user_verification_process SET verifyCode = ?, address = ?, amount = ?, email = ?, status = ? WHERE id = ?`, [object.verifyCode, object.address, object.amount, object.email, object.status, user_id], function(){
 		if(callback) callback();
 	})
 }
 
 // Return item with the same device address
 function returnStatusByDevice(user_id, callback){
-	db.query("SELECT * FROM VerificationCode WHERE id = ?", [user_id], function(rows){
+	db.query("SELECT * FROM user_verification_process WHERE id = ?", [user_id], function(rows){
 		if (rows.length === 0)
 			throw Error('no current object');
 		var result = rows[0];
@@ -54,7 +57,7 @@ function returnStatusByDevice(user_id, callback){
 
 // Cancel atestation
 function cancelAtestation(user_id){
-	db.query("UPDATE VerificationCode SET cancel_date="+db.getNow()+" WHERE id=?", [user_id]);
+	db.query("UPDATE user_verification_process SET cancel_date="+db.getNow()+" WHERE id=?", [user_id]);
 }
 
 function replaceConsoleLog(){
@@ -83,7 +86,7 @@ eventBus.on('paired', function(from_address){
 		return handleNoWallet(from_address);
 	CreateNewNote(from_address, function(){
 		// Selecting user's ID by device address
-		db.query("SELECT id FROM VerificationCode WHERE deviceAddress=?", [device_address], function(rows){
+		db.query("SELECT id FROM user_verification_process WHERE deviceAddress=?", [device_address], function(rows){
 			if (rows.length === 0)
 				throw Error('no current object');
 			userId = rows[0];
@@ -105,15 +108,15 @@ eventBus.on('text', function (from_address, text){
 				// Sending message with validation code 
 				sendMessageToUser(usersText, verifCode);//TODO: to fix sendmail config at my desktop computer
 				console.log("looooooooooooooooooooooooooooooo " + verifCode);
-				result.status = 'wait for verification code';
+				result.status = 'waiting for verification code';
 				result.email = usersText;
 				updateNote(result, userId, function(){
 					device.sendMessageToDevice(from_address, 'text', "Message sending to your email address. \nInput your confirmation code here");
 				});
 				break;
-			case 'wait for verification code':
+			case 'waiting for verification code':
 				if(verifCode == usersText){
-					result.status = 'Success code verification';
+					result.status = 'Offer to pay';
 					result.verifyCode = usersText;
 					updateNote(result, userId);
 					device.sendMessageToDevice(from_address, 'text', "Confirmation code is valid, to continue atestation input your current byteball address")
@@ -123,7 +126,7 @@ eventBus.on('text', function (from_address, text){
 					device.sendMessageToDevice(from_address, 'text', "It is invalid confirmation code. \n Please enter your email address again.")
 				}
 				break;
-			case 'Success code verification':
+			case 'Offer to pay':
 				walletDefinedByKeys.issueNextAddress(wallet, 0, function(objAddress){
 					result.address = objAddress.address;
 					result.status = 'Wait for payment';
@@ -162,13 +165,14 @@ eventBus.on('text', function (from_address, text){
 eventBus.on('new_my_transactions', function(arrUnits){
 	// console.log("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq " + arrUnits);
 	"SELECT id, outputs.unit, deviceAddress, outputs.amount AS paid_amount \n\
-	FROM outputs JOIN VerificationCode USING(address) WHERE outputs.unit IN(?) AND outputs.asset IS NULL", 
+	FROM outputs JOIN user_verification_process USING(address) WHERE outputs.unit IN(?) AND outputs.asset IS NULL", 
 	[arrUnits],
 	function(rows){
 		rows.forEach(function(row){
+			// TODO: Check the address from which the tx was sent
 			if (conf.price !== row.paid_amount)
 				return device.sendMessageToDevice(row.deviceAddress, 'text', "Received incorect amount from you: expected "+conf.price+" bytes, received "+row.paid_amount+" bytes.  The payment is ignored.");
-			db.query("UPDATE VerificationCode SET amount=?, status='unconfirmed transaction' WHERE id=?", [row.unit, row.id]);
+			db.query("UPDATE user_verification_process SET amount=?, status='unconfirmed transaction' WHERE id=?", [row.unit, row.id]);
 			device.sendMessageToDevice(row.deviceAddress, 'text', "Received your payment, please wait a few minutes while it is still unconfirmed.");
 		});
 	}
@@ -178,12 +182,12 @@ eventBus.on('my_transactions_became_stable', function(arrUnits){
 	// console.log("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww " + arrUnits);
 	db.query(
 		"SELECT id, deviceAddress, sequence \n\
-		FROM VerificationCode JOIN units USING(unit) WHERE unit IN(?)", 
+		FROM user_verification_process JOIN units USING(unit) WHERE unit IN(?)", 
 		[arrUnits], 
 		function(rows){
 			rows.forEach(function(row){
 				var step = (row.sequence === 'good') ? 'done' : 'doublespend';
-				db.query("UPDATE VerificationCode SET status=? WHERE id=?", [step, row.id]);
+				db.query("UPDATE user_verification_process SET status=? WHERE id=?", [step, row.id]);
 				device.sendMessageToDevice(
 					row.deviceAddress, 'text', 
 					(step === 'done') 
