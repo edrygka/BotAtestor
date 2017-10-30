@@ -10,7 +10,7 @@ var mail = require('byteballcore/mail.js');
 var wallet;
 
 
-//Total 'TODO' 3!!!
+//Total 'TODO' 4!!!
 
 // Sending message to mail
 function sendMessageToUser(to, code){
@@ -20,15 +20,6 @@ function sendMessageToUser(to, code){
 		subject: "Verification",
 		body: "It is your verification code "+ code
 	});
-}
-
-// This function check verification status of object, return true if object is verificated
-function verificationState(object){
-	for (key in object){
-		if(object[key] == false)
-			return false;
-	}
-	return true;
 }
 
 // Gen code between min and max integers
