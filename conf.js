@@ -1,4 +1,4 @@
-exports.deviceName = "Eduard";
+exports.deviceName = "Atestation Bot";
 exports.permanent_pairing_secret = "randomstring";
 exports.hub = "byteball.org/bb";
 exports.price = 1;

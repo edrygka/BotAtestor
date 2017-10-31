@@ -6,9 +6,9 @@ CREATE TABLE user_verification_process(
     amount INTEGER NULL,
     email VARCHAR(50) NULL,
     status VARCHAR(50) DEFAULT unverified,
-    deviceAddress VARCHAR(50),
+    deviceAddress CHAR(50),
     cancelDate timestamp,
     FOREIGN KEY (address) REFERENCES my_addresses(address),
     FOREIGN KEY (unit) REFERENCES units(unit),
-    FOREIGN KEY (deviceAddress) REFERENCES devices(device_address)
+    FOREIGN KEY (deviceAddress) REFERENCES correspondent_devices(device_address)
     );

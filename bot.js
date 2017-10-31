@@ -89,13 +89,15 @@ eventBus.on('paired', function(from_address){
 		db.query("SELECT id FROM user_verification_process WHERE deviceAddress=?", [from_address], function(rows){
 			if (rows.length === 0)
 				throw Error('no current object');
-			userId = rows[0];
+			userId = rows[0].id;
+			console.log("looooooooooooooooooooooo "+userId)
 		});
 		device.sendMessageToDevice(from_address, 'text', "Hi! I am Atestation Bot, I will atestate you.\t Please send me your current email address")
 	});
 });
 
 var verifCode;
+var inputsCount = 1;
 
 // Get user's byteball address
 eventBus.on('text', function (from_address, text){
@@ -121,9 +123,14 @@ eventBus.on('text', function (from_address, text){
 					updateNote(result, userId);
 					device.sendMessageToDevice(from_address, 'text', "Confirmation code is valid, to continue atestation input your current byteball address")
 				} else{
-					result.status = 'unverified';
-					updateNote(result, userId);
-					device.sendMessageToDevice(from_address, 'text', "It is invalid confirmation code. \n Please enter your email address again.")
+					inputsCount++;
+					if(inputsCount !== 4){
+						device.sendMessageToDevice(from_address, 'text', "Cofirmation code is not valid, please try again ");
+					} else {
+						result.status = 'unverified';
+						updateNote(result, userId);
+						device.sendMessageToDevice(from_address, 'text', "It is invalid confirmation code. \n Please enter your email address again.")
+					}
 				}
 				break;
 			case 'Offer to pay':
@@ -164,12 +171,17 @@ eventBus.on('text', function (from_address, text){
 //Wait for confirming TX
 eventBus.on('new_my_transactions', function(arrUnits){
 	// console.log("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq " + arrUnits);
-	"SELECT id, outputs.unit, deviceAddress, outputs.amount AS paid_amount \n\
+	"SELECT id, outputs.unit, deviceAddress, outputs.address AS paid_address, outputs.amount AS paid_amount \n\
 	FROM outputs JOIN user_verification_process USING(address) WHERE outputs.unit IN(?) AND outputs.asset IS NULL", 
 	[arrUnits],
 	function(rows){
 		rows.forEach(function(row){
 			// TODO: Check the address from which the tx was sent
+			db.query("SELECT address FROM user_verification_process WHERE id=?", [userId], function(Rows){
+				if(Rows.address !== row.paid_address)
+					return device.sendMessageToDevice(row.deviceAddress, 'text', "Payment came from the not claimed address, check you are in the single-address wallet, turn on your single address wallet or begin atestation at first");
+				
+			})
 			if (conf.price !== row.paid_amount)
 				return device.sendMessageToDevice(row.deviceAddress, 'text', "Received incorect amount from you: expected "+conf.price+" bytes, received "+row.paid_amount+" bytes.  The payment is ignored.");
 			db.query("UPDATE user_verification_process SET amount=?, status='unconfirmed transaction' WHERE id=?", [row.unit, row.id]);
