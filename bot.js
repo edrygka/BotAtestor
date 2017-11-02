@@ -176,9 +176,8 @@ eventBus.on('new_my_transactions', function(arrUnits){
 	[arrUnits],
 	function(rows){
 		rows.forEach(function(row){
-			// TODO: Check the address from which the tx was sent
 			db.query("SELECT address FROM user_verification_process WHERE id=?", [userId], function(Rows){
-				if(Rows.address !== row.paid_address)
+				if(Rows[0].address !== row.paid_address)
 					return device.sendMessageToDevice(row.deviceAddress, 'text', "Payment came from the not claimed address, check you are in the single-address wallet, turn on your single address wallet or begin atestation at first");
 				
 			})
