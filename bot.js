@@ -6,7 +6,7 @@ var walletDefinedByKeys = require('byteballcore/wallet_defined_by_keys.js');
 var conf = require('./conf.js');
 require("byteballcore/wallet.js");
 var headlessWallet = require("headless-byteball");
-var mail = require('byteballcore/mail.js');
+var nodemailer = require('nodemailer');
 var wallet;
 
 
@@ -16,12 +16,28 @@ var wallet;
 
 
 // Sending message to mail
-function sendMessageToUser(to, code){
-	mail.sendmail({
-		to: to,
-		from: conf.admin_mail,
-		subject: "Verification",
-		body: "It is your verification code "+ code
+
+var transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'byteball4@gmail.com',
+    pass: 'byteball1'
+  }
+});
+
+function sendMessageToUser(email, code){
+	var mailOptions = {
+		from: 'byteball4@gmail.com',
+		to: email,
+		subject: 'Verification',
+		text: "It is your verification code "+ code
+	};
+	transporter.sendMail(mailOptions, function(err, info){
+		if (err) {
+		  console.log(err);
+		} else {
+		  console.log('Email sent: ' + info.response);
+		}
 	});
 }
 
@@ -40,7 +56,7 @@ function CreateNewNote(device_address, callback){
 
 // Update anything row in table
 function updateNote(object, user_id, callback){
-	db.query(`UPDATE user_verification_process SET verifyCode = ?, address = ?, amount = ?, email = ?, status = ? WHERE id = ?`, [object.verifyCode, object.address, object.amount, object.email, object.status, user_id], function(){
+	db.query(`UPDATE user_verification_process SET verifyCode = ?, paid_address = ?, verification_address = ?, amount = ?, email = ?, status = ? WHERE id = ?`, [object.verifyCode, object.paid_address, object.verification_address, object.amount, object.email, object.status, user_id], function(){
 		if(callback) callback();
 	})
 }
@@ -100,8 +116,7 @@ var verifCode;
 var inputsCount = 1;
 
 // Get user's byteball address
-eventBus.on('text', function (from_address, text){
-	var usersText = text;
+eventBus.on('text', function (from_address, usersText){
 	
 	returnStatusByDevice(userId, function(result){
 		switch(result.status){
@@ -135,7 +150,8 @@ eventBus.on('text', function (from_address, text){
 				break;
 			case 'Offer to pay':
 				walletDefinedByKeys.issueNextAddress(wallet, 0, function(objAddress){
-					result.address = objAddress.address;
+					result.paid_address = objAddress.address;
+					result.verification_address = usersText;
 					result.status = 'Wait for payment';
 					updateNote(result, userId);
 					device.sendMessageToDevice(from_address, 'text', "I am memorize your byteball address "+usersText+" .\tPlease pay to continue atestation.\n["+conf.price+" bytes](byteball:"+objAddress.address+"?amount="+conf.price+")");//cost of assets 1 bytes
@@ -170,7 +186,9 @@ eventBus.on('text', function (from_address, text){
 
 //Wait for confirming TX
 eventBus.on('new_my_transactions', function(arrUnits){
-	// console.log("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq " + arrUnits);
+	console.log("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq " + JSON.stringify(arrUnits));
+	// TODO: SELECT address from inputs where unit=arrUnits; query that get needed address
+	// SELECT id, outputs.unit, deviceAddress, outputs.address AS paid_address, outputs.amount AS paid_amount FROM outputs JOIN user_verification_process USING(address) WHERE outputs.unit IN("4ok63EHeAruVsiz/ycfBbIjVozc+Fz1sK/nnsObTo5U=") AND outputs.asset IS NULL;
 	"SELECT id, outputs.unit, deviceAddress, outputs.address AS paid_address, outputs.amount AS paid_amount \n\
 	FROM outputs JOIN user_verification_process USING(address) WHERE outputs.unit IN(?) AND outputs.asset IS NULL", 
 	[arrUnits],
@@ -190,7 +208,7 @@ eventBus.on('new_my_transactions', function(arrUnits){
 });
 
 eventBus.on('my_transactions_became_stable', function(arrUnits){
-	// console.log("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww " + arrUnits);
+	console.log("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww " + JSON.stringify(arrUnits));
 	db.query(
 		"SELECT id, deviceAddress, sequence \n\
 		FROM user_verification_process JOIN units USING(unit) WHERE unit IN(?)", 

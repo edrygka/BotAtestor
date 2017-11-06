@@ -12,7 +12,7 @@
     "headless-byteball": "git+https://github.com/byteball/headless-byteball.git",
     "http": "0.0.0",
     "logger": "0.0.1",
-    "nodemailer": "^4.2.0",
+    "nodemailer": "^4.3.1",
     "sendmail": "^1.2.0"
   },
   "author": "Eduard",
